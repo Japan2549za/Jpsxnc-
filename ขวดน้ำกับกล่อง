@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ขวดน้ำกับโทรศัพท์</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: url('https://www.transparenttextures.com/patterns/green-paper.png'); /* Background texture */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            color: #333; /* Dark text for readability */
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #4CAF50; /* Green color for the title */
+            margin-bottom: 20px;
+            font-size: 2.5em; /* Increase title font size */
+        }
+
+        #webcam-container {
+            border: 2px solid #4CAF50; /* Green border for the webcam container */
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        #label-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 300px;
+            margin-top: 10px;
+        }
+
+        .label {
+            background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white for labels */
+            color: #333; /* Dark text color for labels */
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            width: 100%;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        button {
+            background-color: #4CAF50; /* Green color for buttons */
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px; /* Adjusted for spacing */
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049; /* Darker green on hover */
+        }
+
+        .stop-button {
+            background-color: #dc3545; /* Red color for stop button */
+        }
+
+        .stop-button:hover {
+            background-color: #c82333; /* Darker red on hover */
+        }
+
+        #high-probability {
+            font-size: 1.5em; /* Increase font size for visibility */
+            margin-top: 20px;
+            color: #ffeb3b; /* Yellow color for highlighting */
+            display: none; /* Initially hidden */
+        }
+
+        #image-container {
+            display: none; /* Initially hidden */
+            margin-top: 20px;
+        }
+
+        #image-container img {
+            width: 200px; /* Adjust image width */
+            border: 2px solid #4CAF50; /* Green border for the image */
+            border-radius: 10px; /* Rounded corners */
+        }
+
+        footer {
+            margin-top: 20px;
+            font-size: 0.8em;
+            color: #777; /* Light color for footer text */
+        }
+    </style>
+</head>
+<body>
+    <h1>โปรแกรมตรวจสอบระหว่างขวดน้ำกับโทรศัพท์</h1>
+    <button type="button" onclick="init()">Start Camera</button>
+    <button type="button" class="stop-button" onclick="stopCamera()">Stop Camera</button>
+    <div id="webcam-container"></div>
+    <div id="label-container"></div>
+    <div id="high-probability"></div> <!-- Element to show high probability -->
+    <div id="image-container"> <!-- Container for the water bottle image -->
+        <img src="path_to_your_water_bottle_image.jpg" alt="Water Bottle" id="water-bottle-image">
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script type="text/javascript">
+        const URL = "https://teachablemachine.withgoogle.com/models/sA4KLxKkw/";
+
+        let model, webcam, labelContainer, maxPredictions;
+
+        // Load the image model and setup the webcam
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            // Load the model and metadata
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            // Convenience function to setup a webcam
+            const flip = true; // whether to flip the webcam
+            webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
+            await webcam.setup(); // request access to the webcam
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            // Append elements to the DOM
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) { // Create label divs
+                const labelDiv = document.createElement("div");
+                labelDiv.className = "label";
+                labelContainer.appendChild(labelDiv);
+            }
+        }
+
+        async function loop() {
+            webcam.update(); // Update the webcam frame
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        // Run the webcam image through the image model
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            let highProbability = document.getElementById("high-probability");
+            let foundHighProb = false;
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+
+                // Check if probability for "Water Bottle" is 1.0
+                if (prediction[i].className === "Water Bottle" && prediction[i].probability === 1.0) {
+                    showWaterBottleImage(); // Call function to show the image
+                    foundHighProb = true;
+                    break; // Stop checking further predictions
+                }
+            }
+
+            // Hide the high probability message if not found
+            if (!foundHighProb) {
+                highProbability.style.display = "none";
+            }
+        }
+
+        // Function to display the water bottle image
+        function showWaterBottleImage() {
+            stopCamera(); // Stop the camera
+            document.getElementById("image-container").style.display = "block"; // Show the image container
+        }
+
+        // Stop the webcam
+        function stopCamera() {
+            if (webcam) {
+                webcam.stop(); // Stop the webcam
+                const webcamContainer = document.getElementById("webcam-container");
+                webcamContainer.innerHTML = ""; // Clear the webcam canvas
+                labelContainer.innerHTML = ""; // Clear predictions
+                document.getElementById("high-probability").style.display = "none"; // Hide high probability message
+            }
+        }
+    </script>
+    <footer>
+        &copy; Jpsxnc ขวดน้ำกับโทรศัพท์
+    </footer>
+</body>
+</html>
